@@ -4,7 +4,6 @@ import type { GameEvent } from "../types/GameEvent";
 import { Player } from "./Player";
 import { Monster } from "./Monster";
 import { getMazeFromTemplate } from "../utils/getMazeFromTemplate";
-import type { InitialPositionConfig, MonsterTargetsConfig } from "../types/Maze";
 import {
   CharacterVelocityMulitplierMap,
   DefiniteModeTiming,
@@ -17,25 +16,23 @@ import {
 } from "../config/config";
 import { CanvasRenderer } from "./CanvasRenderer";
 import { CollisionDetector } from "./CollisionDetector";
-import type { Barrier } from "./Barrier";
 import type { MazeTemplate } from "../types/MazeTemplate";
-import type { Pellet } from "./Pellet";
-import type { Teleporter } from "./Teleporter";
 import type { MonsterConfig } from "../config/monster";
 import type { CollidableObject } from "./CollidableObject";
 import { useTimeout } from "../utils/useTimeout";
-import type { Cell } from "./Cell";
 import type { Character } from "./Character";
 import type { Direction } from "../types/Direction";
+import { Round } from './Round';
 
 export class Game {
+  round: Round;
   mazeTemplates: Array<MazeTemplate>;
   modeTimings: Record<RoundGroup, RoundModeTimings>;
   characterVelocityMultiplierConfig: CharacterVelocityMulitplierMap;
   velocityMultipliersForRound: RoundCharacterVelocityMulitplierConfig | null =
-    null;
-  roundModeTimings: RoundModeTimings | null = null;
-  roundStage: number = 0;
+    null; // TODO: this feels round specific?
+  roundModeTimings: RoundModeTimings | null = null; // TODO: this feels round specific?
+  roundStage: number = 0; // TODO: This feels round specific?
   currentStageTiming: DefiniteModeTiming | IndefiniteModeTiming | null = null;
   scatterAndChaseTimer: { pause: () => void; resume: () => void } | null = null;
   fleeTimeout: null | ReturnType<typeof setTimeout> = setTimeout(() => {});
@@ -43,17 +40,10 @@ export class Game {
   score: number;
   roundNumber: number;
   livesCount: number;
-  barriers: Array<Barrier>;
-  pellets: Array<Pellet>;
-  teleporters: Array<Teleporter>;
-  initialCharacterPositions: InitialPositionConfig;
-  monsterTargets: MonsterTargetsConfig;
   player: Player;
   monsters: Array<Monster>;
   collisionDetector: CollisionDetector;
   renderer: CanvasRenderer;
-  slowZoneCells: Array<Cell>;
-  noUpCells: Array<Cell>;
 
   constructor(
     config: GameConfig,
@@ -65,7 +55,7 @@ export class Game {
       config.characterVelocityMultipliers;
     this.mazeTemplates = mazeTemplates;
     this.score = 0;
-    this.roundNumber = 1;
+    this.roundNumber = 1; // we should use 0 based count, and just display the round number as this plus 1
     this.livesCount = 3;
     const {
       barriers,
@@ -77,15 +67,17 @@ export class Game {
       teleporters,
       monsterTargets,
     } = getMazeFromTemplate(mazeTemplates[this.roundNumber - 1]);
-    this.monsterTargets = monsterTargets;
-    this.barriers = barriers.collidable;
+    this.round = new Round({
+      barriers: barriers.collidable,
+      noUpCells,
+      slowZoneCells,
+      pellets,
+      monsterTargets,
+      initialCharacterPositions,
+      teleporters,
+    });
     this.renderer = new CanvasRenderer(dimensions, barriers.renderable);
     this.collisionDetector = new CollisionDetector();
-    this.slowZoneCells = slowZoneCells;
-    this.noUpCells = noUpCells;
-    this.teleporters = teleporters;
-    this.pellets = pellets;
-    this.initialCharacterPositions = initialCharacterPositions;
     this.player = new Player(
       config.character.size,
       config.character.stepSize,
@@ -146,7 +138,7 @@ export class Game {
   private isMonsterInTunnel(monster: Monster) {
     return (
       -1 !==
-      this.slowZoneCells.findIndex((slowZoneCell) => {
+      this.round.getSlowZoneCells().findIndex((slowZoneCell) => {
         return this.collisionDetector.areObjectsColliding(
           monster,
           slowZoneCell,
@@ -160,7 +152,7 @@ export class Game {
     const forbiddenDirections: Array<Direction> = [];
     if (
       -1 !==
-      this.noUpCells.findIndex((noUpCell) => {
+      this.round.getNoUpCells().findIndex((noUpCell) => {
         return this.collisionDetector.areObjectsColliding(
           noUpCell,
           monster,
@@ -294,7 +286,7 @@ export class Game {
   }
 
   private isRoundOver() {
-    return this.pellets.every((pellet) => pellet.hasBeenEaten);
+    return this.round.getPellets().every((pellet) => pellet.hasBeenEaten);
   }
 
   private updateCharacterPositions() {
@@ -310,16 +302,16 @@ export class Game {
 
   private resetCharacterPositions() {
     this.player.setPositionAndUpdateHitbox(
-      this.initialCharacterPositions.player
+      this.round.getInitialCharacterPositions().player
     );
     this.monsters.forEach((monster) => {
-      monster.reset(this.initialCharacterPositions.monsters[monster.name]);
+      monster.reset(this.round.getInitialCharacterPositions().monsters[monster.name]);
     });
   }
 
   private checkForCollisionsWithTeleporters() {
     [this.player, ...this.monsters].forEach((character) => {
-      const collidingTeleporter = this.teleporters.find((teleporter) => {
+      const collidingTeleporter = this.round.getTeleporters().find((teleporter) => {
         return this.collisionDetector.areObjectsColliding(
           teleporter,
           character,
@@ -358,7 +350,7 @@ export class Game {
       if (
         this.collisionDetector.areObjectsColliding(
           monster,
-          this.monsterTargets.revive,
+          this.round.getMonsterTargets().revive,
           "center"
         )
       ) {
@@ -367,7 +359,7 @@ export class Game {
       if (
         this.collisionDetector.areObjectsColliding(
           monster,
-          this.monsterTargets.exit,
+          this.round.getMonsterTargets().exit,
           "center"
         )
       ) {
@@ -377,14 +369,14 @@ export class Game {
   }
 
   private checkForCharacterPelletCollisions() {
-    this.pellets
+    this.round.getPellets()
       .filter((pellet) => !pellet.hasBeenEaten)
       .forEach((pellet) => {
         if (
           this.collisionDetector.areObjectsColliding(
             this.player,
             pellet,
-            "center"
+            "sameCell"
           )
         ) {
           pellet.hasBeenEaten = true;
@@ -395,7 +387,7 @@ export class Game {
   }
 
   private isPositionAvailable(characterAtNextPosition: CollidableObject) {
-    return this.barriers.every((barrier) => {
+    return this.round.getBarriers().every((barrier) => {
       return !this.collisionDetector.areObjectsColliding(
         barrier,
         characterAtNextPosition,
@@ -409,7 +401,7 @@ export class Game {
     this.updateVelocityMultipliersForRound();
     this.startNextRoundStage();
     this.player.initialize(
-      this.initialCharacterPositions.player,
+      this.round.getInitialCharacterPositions().player,
       (characterAtNextPosition: CollidableObject) =>
         this.isPositionAvailable(characterAtNextPosition)
     );
@@ -432,7 +424,7 @@ export class Game {
       this.checkForMonsterTargetCollisions();
       this.checkForCharacterCollisions();
       this.renderer?.update(
-        this.pellets.filter((pellet) => !pellet.hasBeenEaten),
+        this.round.getPellets().filter((pellet) => !pellet.hasBeenEaten),
         this.player,
         this.monsters
       );
