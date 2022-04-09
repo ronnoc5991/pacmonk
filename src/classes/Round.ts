@@ -10,6 +10,8 @@ import type { Pellet } from './Pellet';
 import type { Teleporter } from './Teleporter';
 import type { Cell } from './Cell';
 import type { InitialPositionConfig, MonsterTargetsConfig } from '../types/Maze';
+import type { VelocityMultipliers } from '../config/velocityMultipliers';
+import type { ModeTimings } from '@/config/modeTiming';
 
 type RoundConfig = {
   barriers: Array<Barrier>;
@@ -19,6 +21,8 @@ type RoundConfig = {
   monsterTargets: MonsterTargetsConfig;
   slowZoneCells: Array<Cell>;
   noUpCells: Array<Cell>;
+  velocityMultipliers: VelocityMultipliers;
+  modeTimings: ModeTimings;
 };
 
 export class Round {
@@ -56,5 +60,13 @@ export class Round {
 
   public getNoUpCells(): Array<Cell> {
     return this.config.noUpCells;
+  }
+
+  public getVelocityMultipliers(): VelocityMultipliers {
+    return this.config.velocityMultipliers;
+  }
+
+  public getModeTimings(): ModeTimings {
+    return this.config.modeTimings;
   }
 }

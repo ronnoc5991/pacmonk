@@ -1,61 +1,50 @@
 import { useAnimationFrame } from "../utils/useAnimationFrame";
+import { useTimeout } from "../utils/useTimeout";
+import { getMazeFromTemplate } from "../utils/getMazeFromTemplate";
+import getRoundVelocityMultipliers from '../utils/getRoundVelocityMultipliers';
 import type { GameMode } from "../types/GameMode";
 import type { GameEvent } from "../types/GameEvent";
-import { Player } from "./Player";
-import { Monster } from "./Monster";
-import { getMazeFromTemplate } from "../utils/getMazeFromTemplate";
-import {
-  CharacterVelocityMulitplierMap,
-  DefiniteModeTiming,
-  GameConfig,
-  IndefiniteModeTiming,
-  modeTimingConfig,
-  RoundCharacterVelocityMulitplierConfig,
-  RoundGroup,
-  RoundModeTimings,
-} from "../config/config";
-import { CanvasRenderer } from "./CanvasRenderer";
-import { CollisionDetector } from "./CollisionDetector";
 import type { MazeTemplate } from "../types/MazeTemplate";
 import type { MonsterConfig } from "../config/monster";
 import type { CollidableObject } from "./CollidableObject";
-import { useTimeout } from "../utils/useTimeout";
 import type { Character } from "./Character";
 import type { Direction } from "../types/Direction";
+import { Player } from "./Player";
+import { Monster } from "./Monster";
 import { Round } from './Round';
+import { CanvasRenderer } from "./CanvasRenderer";
+import { CollisionDetector } from "./CollisionDetector";
+import type { GameConfig } from "../config/config";
+import type { DefiniteModeTiming, IndefiniteModeTiming } from '@/config/modeTiming';
+import getRoundModeTimings from '@/utils/getRoundModeTimings';
 
 export class Game {
   round: Round;
+  collisionDetector: CollisionDetector;
+  renderer: CanvasRenderer;
+  player: Player;
+  monsters: Array<Monster>;
+  score: number;
+  roundNumber: number;
+  livesCount: number;
+
+  // roundConfigs: Array<RoundConfig> TODO: Game should have an array of these configs and create new rounds by accessing it at the roundNumber index
+
   mazeTemplates: Array<MazeTemplate>;
-  modeTimings: Record<RoundGroup, RoundModeTimings>;
-  characterVelocityMultiplierConfig: CharacterVelocityMulitplierMap;
-  velocityMultipliersForRound: RoundCharacterVelocityMulitplierConfig | null =
-    null; // TODO: this feels round specific?
-  roundModeTimings: RoundModeTimings | null = null; // TODO: this feels round specific?
   roundStage: number = 0; // TODO: This feels round specific?
   currentStageTiming: DefiniteModeTiming | IndefiniteModeTiming | null = null;
   scatterAndChaseTimer: { pause: () => void; resume: () => void } | null = null;
   fleeTimeout: null | ReturnType<typeof setTimeout> = setTimeout(() => {});
   mode: GameMode | null = null;
-  score: number;
-  roundNumber: number;
-  livesCount: number;
-  player: Player;
-  monsters: Array<Monster>;
-  collisionDetector: CollisionDetector;
-  renderer: CanvasRenderer;
 
-  constructor(
+  constructor( // TODO: Game should only take a single config object as arguments
     config: GameConfig,
     mazeTemplates: Array<MazeTemplate>,
     monsterConfig: MonsterConfig
   ) {
-    this.modeTimings = config.modeTimings;
-    this.characterVelocityMultiplierConfig =
-      config.characterVelocityMultipliers;
     this.mazeTemplates = mazeTemplates;
     this.score = 0;
-    this.roundNumber = 1; // we should use 0 based count, and just display the round number as this plus 1
+    this.roundNumber = 0; // TODO: This should be called roundIndex
     this.livesCount = 3;
     const {
       barriers,
@@ -66,7 +55,7 @@ export class Game {
       pellets,
       teleporters,
       monsterTargets,
-    } = getMazeFromTemplate(mazeTemplates[this.roundNumber - 1]);
+    } = getMazeFromTemplate(mazeTemplates[this.roundNumber]);
     this.round = new Round({
       barriers: barriers.collidable,
       noUpCells,
@@ -75,6 +64,8 @@ export class Game {
       monsterTargets,
       initialCharacterPositions,
       teleporters,
+      velocityMultipliers: getRoundVelocityMultipliers(this.roundNumber),
+      modeTimings: getRoundModeTimings(this.roundNumber)
     });
     this.renderer = new CanvasRenderer(dimensions, barriers.renderable);
     this.collisionDetector = new CollisionDetector();
@@ -102,20 +93,7 @@ export class Game {
       );
   }
 
-  // TODO: Create some sort of getRoundConfig function that gets the following:
-  // the mazeTemplate and all state derived from that
-  // the scatterAndChase timings
-  // the timings for the flee modes
-
-  // TODO: Should Game pass its information 'upward' to a renderer?  What is the correct interaction with the renderer?
-
-  // TODO: The Game should regulate how fast each character can move
-  // It should have a config object just like the mode Timings
-  // It should grab the correct velocity mulitplier from the table and pass it/set it on the character based on their location
-
   private getVelocityMultiplier(character: Character, isMonster: boolean) {
-    if (!this.velocityMultipliersForRound) return 1;
-    // at the beginning of the round, set the velocity mulitplier config
     // if it is a monster that is alive and has not recently been revived, and it is flee mode, we need to impose a speed limit
     // if is Monsters, check if in slowZone
     // from this function, call other functions and determine what velocity multiplier takes precedent
@@ -123,29 +101,20 @@ export class Game {
     if (isMonster) {
       const currentMonster = character as Monster;
       return Math.min(
-        this.velocityMultipliersForRound.monster[
+        this.round.getVelocityMultipliers().monster[
           this.isMonsterInTunnel(currentMonster) ? "tunnel" : "default"
         ],
-        this.velocityMultipliersForRound.monster[
+        this.round.getVelocityMultipliers().monster[
           this.mode === "flee" && currentMonster.isAlive ? "flee" : "default"
         ]
       );
     } else {
-      return Math.min(this.velocityMultipliersForRound.player.default);
+      return this.round.getVelocityMultipliers().player.default;
     }
   }
 
   private isMonsterInTunnel(monster: Monster) {
-    return (
-      -1 !==
-      this.round.getSlowZoneCells().findIndex((slowZoneCell) => {
-        return this.collisionDetector.areObjectsColliding(
-          monster,
-          slowZoneCell,
-          "sameCell"
-        );
-      })
-    );
+    return this.round.getSlowZoneCells().some((slowZoneCell) => this.collisionDetector.areObjectsColliding(monster, slowZoneCell, 'sameCell'));
   }
 
   private getMonsterForbiddenDirections(monster: Monster): Array<Direction> {
@@ -170,53 +139,13 @@ export class Game {
     this.mode = newMode;
   }
 
-  private setVelocityMultipliersForRound(
-    newVelocityMultipliers: RoundCharacterVelocityMulitplierConfig
-  ) {
-    this.velocityMultipliersForRound = newVelocityMultipliers;
-  }
-
-  private getVelocityMultipliersForRound(
-    roundNumber: number
-  ): RoundCharacterVelocityMulitplierConfig {
-    if (roundNumber === 1)
-      return this.characterVelocityMultiplierConfig.roundOne;
-    if (roundNumber >= 2 && roundNumber <= 4)
-      return this.characterVelocityMultiplierConfig.roundsTwoThroughFour;
-    if (roundNumber >= 5 && roundNumber <= 20)
-      return this.characterVelocityMultiplierConfig.roundsFiveThroughTwenty;
-    else return this.characterVelocityMultiplierConfig.roundsTwentyOneAndUp;
-  }
-
-  private updateVelocityMultipliersForRound() {
-    this.setVelocityMultipliersForRound(
-      this.getVelocityMultipliersForRound(this.roundNumber)
-    );
-  }
-
-  private getModeTimingsForRound(roundNumber: number): RoundModeTimings {
-    if (roundNumber === 1) return modeTimingConfig.roundOne;
-    if (roundNumber >= 2 && roundNumber <= 4)
-      return modeTimingConfig.roundsTwoThroughFour;
-    return modeTimingConfig.roundsFiveAndUp;
-  }
-
-  private setModeTimingsForRound(newModeTimings: RoundModeTimings) {
-    this.roundModeTimings = newModeTimings;
-  }
-
-  private updateModeTimingsForRound() {
-    this.setModeTimingsForRound(this.getModeTimingsForRound(this.roundNumber));
-  }
-
   private incrementRoundStage() {
-    if (this.roundModeTimings && this.roundModeTimings[this.roundStage + 1])
+    if (this.round.getModeTimings()[this.roundStage + 1])
       this.roundStage++;
   }
 
   private updateCurrentStage() {
-    if (this.roundModeTimings)
-      this.currentStageTiming = this.roundModeTimings[this.roundStage];
+    this.currentStageTiming = this.round.getModeTimings()[this.roundStage];
   }
 
   private updateMode(newMode: GameMode) {
@@ -397,8 +326,6 @@ export class Game {
   }
 
   public initialize() {
-    this.updateModeTimingsForRound();
-    this.updateVelocityMultipliersForRound();
     this.startNextRoundStage();
     this.player.initialize(
       this.round.getInitialCharacterPositions().player,

@@ -19,7 +19,7 @@ export class CanvasRenderer {
     { width, height }: { width: number; height: number },
     barriers: Array<RenderableBarrier>
   ) {
-    this.cellSizeInPixels = 20;
+    this.cellSizeInPixels = 20; // TODO: This should be configurable
     this.barriers = barriers;
     this.canvasHeight = height * this.cellSizeInPixels;
     this.canvasWidth = width * this.cellSizeInPixels;
@@ -67,7 +67,8 @@ export class CanvasRenderer {
         this.contexts.dynamic,
         pellet.position,
         pellet.size,
-        this.cellSizeInPixels
+        this.cellSizeInPixels,
+        'red',
       )
     );
     drawCircle(

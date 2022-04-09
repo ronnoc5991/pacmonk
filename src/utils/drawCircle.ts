@@ -8,8 +8,8 @@ export const drawCircle = (
   color: string = "#082ed0"
 ) => {
   const scaledPosition = { x: position.x * cellSize, y: position.y * cellSize };
-  context.strokeStyle = color;
+  context.fillStyle = color;
   context.beginPath();
   context.arc(scaledPosition.x, scaledPosition.y, diameter * cellSize / 2, 0, 2 * Math.PI);
-  context.stroke();
+  context.fill();
 };
