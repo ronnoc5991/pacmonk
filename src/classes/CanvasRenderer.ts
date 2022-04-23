@@ -19,7 +19,7 @@ export class CanvasRenderer {
     { width, height }: { width: number; height: number },
     barriers: Array<RenderableBarrier>
   ) {
-    this.cellSizeInPixels = 20; // TODO: This should be configurable
+    this.cellSizeInPixels = 16; // TODO: This should be configurable
     this.barriers = barriers;
     this.canvasHeight = height * this.cellSizeInPixels;
     this.canvasWidth = width * this.cellSizeInPixels;

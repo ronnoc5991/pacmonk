@@ -1,9 +1,5 @@
-// TODO: Look into what parsing a round array looks like
-// Can create a series of round arrays
-// Put each round array in an array
-// also create an object or function that gets the round config based on round number
-// Loop over each array, parse the array, get the round config information, create a round config object
-// that object should 'ship' with the game, we do not need to parse this on the browser.  Should already be parsed
+// TODO: Create all Round maps, parse them, then store that parsed config object
+// there is no need to make this parsing part of the game
 
 import type { Barrier } from './Barrier';
 import type { Pellet } from './Pellet';

@@ -45,7 +45,7 @@ export class Player extends Character {
         size: this.size,
       })
     )
-      this.takeNextStep(velocityMultiplier); // TODO: Incorporate velocity multiplier here
+      this.takeNextStep(velocityMultiplier);
   }
 
   public initialize(

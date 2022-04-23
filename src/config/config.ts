@@ -1,3 +1,8 @@
+import type { MonsterConfig } from '@/config/monster';
+import { monsterConfig } from '@/config/monster';
+import type { MazeTemplate } from '@/types/MazeTemplate';
+import { mazeTemplate } from '@/config/mazeTemplate';
+
 export type GameConfig = {
   pelletSize: number;
   powerPelletSize: number;
@@ -6,6 +11,8 @@ export type GameConfig = {
     stepSize: number;
     baseVelocity: number;
   };
+  monster: MonsterConfig;
+  mazeTemplates: Array<MazeTemplate>;
 }
 
 export const config: GameConfig = {
@@ -16,4 +23,6 @@ export const config: GameConfig = {
     stepSize: 0.1,
     baseVelocity: 0.1,
   },
+  monster: monsterConfig,
+  mazeTemplates: [mazeTemplate],
 };

@@ -1,11 +1,11 @@
 import { useAnimationFrame } from "../utils/useAnimationFrame";
 import { useTimeout } from "../utils/useTimeout";
-import { getMazeFromTemplate } from "../utils/getMazeFromTemplate";
+import { getMazeFromTemplate } from "../utils/getMazeFromTemplate"; // TODO: This should happen before we ever start the game, not a part of this App
 import getRoundVelocityMultipliers from '../utils/getRoundVelocityMultipliers';
+import getRoundModeTimings from '../utils/getRoundModeTimings';
 import type { GameMode } from "../types/GameMode";
 import type { GameEvent } from "../types/GameEvent";
 import type { MazeTemplate } from "../types/MazeTemplate";
-import type { MonsterConfig } from "../config/monster";
 import type { CollidableObject } from "./CollidableObject";
 import type { Character } from "./Character";
 import type { Direction } from "../types/Direction";
@@ -15,34 +15,31 @@ import { Round } from './Round';
 import { CanvasRenderer } from "./CanvasRenderer";
 import { CollisionDetector } from "./CollisionDetector";
 import type { GameConfig } from "../config/config";
-import type { DefiniteModeTiming, IndefiniteModeTiming } from '@/config/modeTiming';
-import getRoundModeTimings from '@/utils/getRoundModeTimings';
+import type { DefiniteModeTiming, IndefiniteModeTiming } from '../config/modeTiming';
+import { useGridOverlay } from '../utils/useGridOverlay';
 
 export class Game {
-  round: Round;
-  collisionDetector: CollisionDetector;
   renderer: CanvasRenderer;
+  collisionDetector: CollisionDetector;
   player: Player;
   monsters: Array<Monster>;
   score: number;
   roundNumber: number;
   livesCount: number;
+  round: Round;
 
   // roundConfigs: Array<RoundConfig> TODO: Game should have an array of these configs and create new rounds by accessing it at the roundNumber index
-
   mazeTemplates: Array<MazeTemplate>;
-  roundStage: number = 0; // TODO: This feels round specific?
-  currentStageTiming: DefiniteModeTiming | IndefiniteModeTiming | null = null;
-  scatterAndChaseTimer: { pause: () => void; resume: () => void } | null = null;
-  fleeTimeout: null | ReturnType<typeof setTimeout> = setTimeout(() => {});
-  mode: GameMode | null = null;
+  roundStage: number = 0; // TODO: This feels round specific? Round should keep track of its own stage?
+  currentStageTiming: DefiniteModeTiming | IndefiniteModeTiming | null = null; // TODO: Round should keep track of its stage timings
+  scatterAndChaseTimer: { pause: () => void; resume: () => void } | null = null; // TODO: This should live in Round?
+  fleeTimeout: null | ReturnType<typeof setTimeout> = setTimeout(() => {}); // TODO: This should live in Round?
+  mode: GameMode | null = null; // TODO: This can probably live here, but be changed based on events that happen elsewhere?
 
-  constructor( // TODO: Game should only take a single config object as arguments
+  constructor(
     config: GameConfig,
-    mazeTemplates: Array<MazeTemplate>,
-    monsterConfig: MonsterConfig
   ) {
-    this.mazeTemplates = mazeTemplates;
+    this.mazeTemplates = config.mazeTemplates;
     this.score = 0;
     this.roundNumber = 0; // TODO: This should be called roundIndex
     this.livesCount = 3;
@@ -55,7 +52,7 @@ export class Game {
       pellets,
       teleporters,
       monsterTargets,
-    } = getMazeFromTemplate(mazeTemplates[this.roundNumber]);
+    } = getMazeFromTemplate(config.mazeTemplates[this.roundNumber]);
     this.round = new Round({
       barriers: barriers.collidable,
       noUpCells,
@@ -74,7 +71,7 @@ export class Game {
       config.character.stepSize,
       config.character.baseVelocity
     );
-    this.monsters = Object.entries(monsterConfig)
+    this.monsters = Object.entries(config.monster)
       .filter((character, index) => index === 0)
       .map(
         ([key, value]) =>
@@ -183,7 +180,7 @@ export class Game {
   private onEvent(event: GameEvent) {
     switch (event) {
       case "pelletEaten":
-        this.increaseScore(10);
+        this.increaseScore(10); // TODO: Point Values should be configurable in the config object
         break;
       case "powerPelletEaten":
         this.increaseScore(50);
